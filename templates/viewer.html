@@ -1,37 +1,24 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Photo Selection</title>
+    <meta charset="UTF-8">
+    <title>Photo Viewer</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; margin-top: 50px; }
+        img { max-width: 80%; max-height: 500px; border: 2px solid #ccc; }
+        .buttons { margin-top: 20px; }
+        button { padding: 10px 20px; margin: 0 10px; font-size: 16px; cursor: pointer; }
+        .select { background-color: #4CAF50; color: white; border: none; }
+        .reject { background-color: #f44336; color: white; border: none; }
+    </style>
 </head>
 <body>
-
-<h3>Client: {{ client }}</h3>
-
-<img id="photo" src="{{ photo_url }}"
-     style="max-width:100%; max-height:80vh;"><br><br>
-
-<button onclick="send('Selected')">Select ✅</button>
-<button onclick="send('Rejected')">Reject ❌</button>
-
-<script>
-const client = "{{ client }}";
-
-function send(action){
-  fetch("/action", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({client, action})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if(d.done){
-      alert("All photos completed");
-    } else {
-      document.getElementById("photo").src = d.photo_url;
-    }
-  });
-}
-</script>
-
+    <h1>Photo Viewer</h1>
+    <img src="{{ url_for('static', filename='temp/' + photo) }}" alt="Photo">
+    
+    <form method="post" action="{{ url_for('action') }}" class="buttons">
+        <button type="submit" name="action" value="select" class="select">Select</button>
+        <button type="submit" name="action" value="reject" class="reject">Reject</button>
+    </form>
 </body>
 </html>
