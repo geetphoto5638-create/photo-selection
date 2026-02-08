@@ -1,110 +1,125 @@
-import os
-import json
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, jsonify
+import os, json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
 
 app = Flask(__name__)
 
 # =========================
-# GOOGLE DRIVE CONFIG
+# GOOGLE DRIVE SETUP
 # =========================
-SCOPES = ["https://www.googleapis.com/auth/drive"]
 
-service_account_info = json.loads(
+SCOPES = ["https://www.googleapis.com/auth/drive"]
+SERVICE_ACCOUNT_INFO = json.loads(
     os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
 )
 
 creds = service_account.Credentials.from_service_account_info(
-    service_account_info,
-    scopes=SCOPES
+    SERVICE_ACCOUNT_INFO, scopes=SCOPES
 )
 
-drive_service = build("drive", "v3", credentials=creds)
+drive = build("drive", "v3", credentials=creds)
+
+# 👉 Drive folder where photos exist
+DRIVE_PHOTO_FOLDER_ID = os.environ.get("DRIVE_PHOTO_FOLDER_ID")
 
 # =========================
-# DRIVE FUNCTIONS
+# MEMORY (simple & safe)
 # =========================
-def create_drive_folder(folder_name, parent_id=None):
-    file_metadata = {
-        "name": folder_name,
-        "mimeType": "application/vnd.google-apps.folder",
-    }
-    if parent_id:
-        file_metadata["parents"] = [parent_id]
 
-    folder = drive_service.files().create(
-        body=file_metadata,
-        fields="id"
+photos = []
+client_index = {}
+
+def load_photos():
+    global photos
+    results = drive.files().list(
+        q=f"'{DRIVE_PHOTO_FOLDER_ID}' in parents and mimeType contains 'image/'",
+        fields="files(id, name)",
+        pageSize=1000
     ).execute()
 
-    return folder.get("id")
+    photos = results.get("files", [])
+    photos.sort(key=lambda x: x["name"])
 
-
-def upload_to_drive(file_path, filename, folder_id):
-    media = MediaFileUpload(file_path, resumable=True)
-    file_metadata = {
-        "name": filename,
-        "parents": [folder_id]
-    }
-
-    drive_service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id"
-    ).execute()
-
+load_photos()
 
 # =========================
 # ROUTES
 # =========================
+
 @app.route("/", methods=["GET", "POST"])
-def index():
+def login():
     if request.method == "POST":
-        client_name = request.form.get("client_name")
+        client = request.form.get("client").strip()
+        if not client:
+            return "Client name required"
 
-        if not client_name:
-            return "Client name required", 400
+        if not photos:
+            return "No photos found in Drive"
 
-        # Create client folder
-        client_folder_id = create_drive_folder(client_name)
+        client_index[client] = 0
+        first = photos[0]["id"]
 
-        # Create subfolders
-        create_drive_folder("Selected", client_folder_id)
-        create_drive_folder("Rejected", client_folder_id)
-
-        return redirect(url_for("upload", client=client_name, folder_id=client_folder_id))
+        return render_template(
+            "viewer.html",
+            client=client,
+            photo_url=f"https://drive.google.com/uc?id={first}"
+        )
 
     return render_template("login.html")
-
-
-@app.route("/upload", methods=["GET", "POST"])
-def upload():
-    client = request.args.get("client")
-    folder_id = request.args.get("folder_id")
-
-    if request.method == "POST":
-        files = request.files.getlist("photos")
-
-        for file in files:
-            save_path = os.path.join("/tmp", file.filename)
-            file.save(save_path)
-            upload_to_drive(save_path, file.filename, folder_id)
-
-        return "Photos uploaded successfully!"
-
-    return render_template("viewer.html", client=client)
 
 
 @app.route("/action", methods=["POST"])
 def action():
     data = request.json
-    return jsonify({"status": "saved", "data": data})
+    client = data["client"]
+    choice = data["action"]
+
+    idx = client_index.get(client, 0)
+    if idx >= len(photos):
+        return jsonify({"done": True})
+
+    file = photos[idx]
+
+    # Create folder if not exists
+    folder_name = f"{client}_{choice}"
+    folder_id = create_folder(folder_name)
+
+    # Move file
+    drive.files().update(
+        fileId=file["id"],
+        addParents=folder_id,
+        removeParents=DRIVE_PHOTO_FOLDER_ID,
+        fields="id, parents"
+    ).execute()
+
+    client_index[client] += 1
+
+    if client_index[client] >= len(photos):
+        return jsonify({"done": True})
+
+    next_file = photos[client_index[client]]["id"]
+
+    return jsonify({
+        "photo_url": f"https://drive.google.com/uc?id={next_file}"
+    })
 
 
-# =========================
-# MAIN
-# =========================
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+def create_folder(name):
+    res = drive.files().list(
+        q=f"name='{name}' and mimeType='application/vnd.google-apps.folder'",
+        fields="files(id)"
+    ).execute()
+
+    if res["files"]:
+        return res["files"][0]["id"]
+
+    meta = {
+        "name": name,
+        "mimeType": "application/vnd.google-apps.folder"
+    }
+    folder = drive.files().create(body=meta, fields="id").execute()
+    return folder["id"]
+
+
+# =======================

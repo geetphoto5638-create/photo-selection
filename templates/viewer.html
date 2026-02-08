@@ -1,50 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Photo Viewer</title>
-    <style>
-        img {
-            max-width: 90%;
-            max-height: 80vh;
-        }
-        button {
-            padding: 15px;
-            margin: 10px;
-            font-size: 18px;
-        }
-    </style>
+  <title>Photo Selection</title>
 </head>
 <body>
 
-<h2>Hello {{ client }}</h2>
+<h3>Client: {{ client }}</h3>
 
-<img id="photo" src="/photos/{{ photo }}">
+<img id="photo" src="{{ photo_url }}"
+     style="max-width:100%; max-height:80vh;"><br><br>
 
-<br><br>
-
-<button onclick="sendAction('Selected')">👍 Select</button>
-<button onclick="sendAction('Rejected')">❌ Reject</button>
-<button onclick="sendAction('Best')">⭐ Best</button>
+<button onclick="send('Selected')">Select ✅</button>
+<button onclick="send('Rejected')">Reject ❌</button>
 
 <script>
-function sendAction(action) {
-    fetch("/action", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            client: "{{ client }}",
-            action: action
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.done) {
-            alert("Selection Completed");
-            location.reload();
-        } else {
-            document.getElementById("photo").src = "/photos/" + data.photo;
-        }
-    });
+const client = "{{ client }}";
+
+function send(action){
+  fetch("/action", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({client, action})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if(d.done){
+      alert("All photos completed");
+    } else {
+      document.getElementById("photo").src = d.photo_url;
+    }
+  });
 }
 </script>
 
