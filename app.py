@@ -1,123 +1,93 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
-from datetime import datetime, timedelta
-import json
 
 app = Flask(__name__)
 
-# ---------------- CONFIG ----------------
-PHOTO_DIR = "Photos/Event1"
-CLIENTS_DIR = "Clients"
-DATA_FILE = "clients.json"
+# ---------------- PATH SETUP (IMPORTANT) ----------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+PHOTO_DIR = os.path.join(BASE_DIR, "Photos", "Event1")
+CLIENTS_DIR = os.path.join(BASE_DIR, "Clients")
 
 os.makedirs(PHOTO_DIR, exist_ok=True)
 os.makedirs(CLIENTS_DIR, exist_ok=True)
 
-# ----------------------------------------
+# ---------------- LOAD PHOTOS ----------------
+photos = [
+    f for f in os.listdir(PHOTO_DIR)
+    if f.lower().endswith((".jpg", ".jpeg", ".png"))
+]
+photos.sort()
 
-def load_clients():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {}
+client_index = {}
 
-def save_clients(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-clients = load_clients()
-
-def get_photos():
-    photos = [f for f in os.listdir(PHOTO_DIR)
-              if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-    photos.sort()
-    return photos
-
-# ---------------- LOGIN ----------------
+# ---------------- LOGIN PAGE ----------------
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        client = request.form.get("client_name", "").strip()
-        if not client:
-            return "Client name required"
+        client_name = request.form.get("client_name", "").strip()
 
-        now = datetime.now()
+        if not client_name:
+            return "Name required"
 
-        # first time client → create validity (7 days example)
-        if client not in clients:
-            expiry = now + timedelta(days=7)
-            clients[client] = {
-                "index": 0,
-                "expiry": expiry.isoformat()
-            }
+        # client folders
+        base = os.path.join(CLIENTS_DIR, client_name)
+        os.makedirs(base, exist_ok=True)
+        os.makedirs(os.path.join(base, "Selected"), exist_ok=True)
+        os.makedirs(os.path.join(base, "Rejected"), exist_ok=True)
+        os.makedirs(os.path.join(base, "Best"), exist_ok=True)
 
-            base = os.path.join(CLIENTS_DIR, client)
-            os.makedirs(os.path.join(base, "Selected"), exist_ok=True)
-            os.makedirs(os.path.join(base, "Rejected"), exist_ok=True)
-            os.makedirs(os.path.join(base, "Best"), exist_ok=True)
+        print("Client folder created:", base)
 
-            save_clients(clients)
+        client_index[client_name] = 0
 
-        # expiry check
-        expiry = datetime.fromisoformat(clients[client]["expiry"])
-        if now > expiry:
-            return "❌ Link expired. Please contact studio."
-
-        photos = get_photos()
-        if not photos:
-            return "No photos found"
-
-        idx = clients[client]["index"]
-        if idx >= len(photos):
-            return "✅ Selection completed"
+        if len(photos) == 0:
+            return "No photos found in Photos/Event1"
 
         return render_template(
             "viewer.html",
-            client=client,
-            photo=photos[idx]
+            client=client_name,
+            photo=photos[0]
         )
 
     return render_template("login.html")
 
-# ---------------- ACTION ----------------
+# ---------------- ACTION (SELECT / REJECT / BEST) ----------------
 @app.route("/action", methods=["POST"])
 def action():
     data = request.json
     client = data["client"]
     action_type = data["action"]
 
-    clients = load_clients()
-    photos = get_photos()
+    index = client_index.get(client, 0)
 
-    if client not in clients:
-        return jsonify({"error": "Invalid client"})
-
-    idx = clients[client]["index"]
-    if idx >= len(photos):
+    if index >= len(photos):
         return jsonify({"done": True})
 
-    photo = photos[idx]
+    photo = photos[index]
+
     target = os.path.join(CLIENTS_DIR, client, action_type)
+    os.makedirs(target, exist_ok=True)
 
-    os.replace(
-        os.path.join(PHOTO_DIR, photo),
-        os.path.join(target, photo)
-    )
+    src = os.path.join(PHOTO_DIR, photo)
+    dst = os.path.join(target, photo)
 
-    clients[client]["index"] += 1
-    save_clients(clients)
+    if os.path.exists(src):
+        os.replace(src, dst)
+        print("Saved:", dst)
 
-    photos = get_photos()
-    if clients[client]["index"] >= len(photos):
+    client_index[client] += 1
+
+    if client_index[client] >= len(photos):
         return jsonify({"done": True})
 
-    return jsonify({"photo": photos[clients[client]["index"]]})
+    return jsonify({"photo": photos[client_index[client]]})
 
-# ---------------- PHOTOS ----------------
+# ---------------- SERVE PHOTOS ----------------
 @app.route("/photos/<filename>")
 def photo_file(filename):
     return send_from_directory(PHOTO_DIR, filename)
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
