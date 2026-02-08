@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask,import shutil, render_template, request, jsonify, send_from_directory
 import os
 
 app = Flask(__name__)
@@ -73,8 +73,8 @@ def action():
     dst = os.path.join(target, photo)
 
     if os.path.exists(src):
-        os.replace(src, dst)
-        print("Saved:", dst)
+        shutil.copy2(src, dst)
+        print("Copied to:", dst)
 
     client_index[client] += 1
 
@@ -82,6 +82,7 @@ def action():
         return jsonify({"done": True})
 
     return jsonify({"photo": photos[client_index[client]]})
+
 
 # ---------------- SERVE PHOTOS ----------------
 @app.route("/photos/<filename>")
