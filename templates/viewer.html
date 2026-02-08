@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Photo Selection</title>
+</head>
+<body>
+    <h2>Client: {{ client }}</h2>
+
+    <img src="/photos/{{ photo }}" style="max-width:90%;height:auto;"><br><br>
+
+    <button onclick="send('Selected')">Select</button>
+    <button onclick="send('Rejected')">Reject</button>
+    <button onclick="send('Best')">⭐ Best</button>
+
+    <script>
+        function send(action){
+            fetch("/action",{
+                method:"POST",
+                headers:{ "Content-Type":"application/json" },
+                body: JSON.stringify({
+                    client:"{{ client }}",
+                    action: action
+                })
+            })
+            .then(r=>r.json())
+            .then(d=>{
+                if(d.done){
+                    alert("All photos completed");
+                    location.reload();
+                }else{
+                    document.querySelector("img").src = "/photos/" + d.photo;
+                }
+            });
+        }
+    </script>
+</body>
+</html>

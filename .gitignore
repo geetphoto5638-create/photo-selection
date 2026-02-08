@@ -1,0 +1,5 @@
+service_account.json
+photos/
+Clients/
+__pycache__/
+.env
