@@ -1,93 +1,110 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
-import shutil
-
+import os
+import json
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from io import BytesIO
-import base64
+from googleapiclient.http import MediaFileUpload
 
 app = Flask(__name__)
 
-# ================== GOOGLE DRIVE CONFIG ==================
-SCOPES = ['https://www.googleapis.com/auth/drive']
-SERVICE_ACCOUNT_FILE = 'service_account.json'
+# =========================
+# GOOGLE DRIVE CONFIG
+# =========================
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
-creds = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+service_account_info = json.loads(
+    os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
 )
-drive = build('drive', 'v3', credentials=creds)
 
-EVENT_FOLDER_NAME = "Event1"
-CLIENTS_FOLDER_NAME = "Clients"
+creds = service_account.Credentials.from_service_account_info(
+    service_account_info,
+    scopes=SCOPES
+)
 
-# ================== HELPERS ==================
-def get_folder_id(name, parent=None):
-    q = f"name='{name}' and mimeType='application/vnd.google-apps.folder'"
-    if parent:
-        q += f" and '{parent}' in parents"
-    res = drive.files().list(q=q).execute().get('files')
-    if res:
-        return res[0]['id']
-    file_metadata = {'name': name, 'mimeType': 'application/vnd.google-apps.folder'}
-    if parent:
-        file_metadata['parents'] = [parent]
-    return drive.files().create(body=file_metadata).execute()['id']
+drive_service = build("drive", "v3", credentials=creds)
 
-ROOT_ID = get_folder_id("PhotoSelection")
-EVENT_ID = get_folder_id(EVENT_FOLDER_NAME, ROOT_ID)
-CLIENTS_ID = get_folder_id(CLIENTS_FOLDER_NAME, ROOT_ID)
+# =========================
+# DRIVE FUNCTIONS
+# =========================
+def create_drive_folder(folder_name, parent_id=None):
+    file_metadata = {
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder",
+    }
+    if parent_id:
+        file_metadata["parents"] = [parent_id]
 
-def list_photos():
-    res = drive.files().list(
-        q=f"'{EVENT_ID}' in parents and mimeType contains 'image/'",
-        fields="files(id,name)"
+    folder = drive_service.files().create(
+        body=file_metadata,
+        fields="id"
     ).execute()
-    return res.get('files', [])
 
-photos = list_photos()
-client_index = {}
+    return folder.get("id")
 
-# ================== ROUTES ==================
-@app.route('/', methods=["GET", "POST"])
-def login():
+
+def upload_to_drive(file_path, filename, folder_id):
+    media = MediaFileUpload(file_path, resumable=True)
+    file_metadata = {
+        "name": filename,
+        "parents": [folder_id]
+    }
+
+    drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id"
+    ).execute()
+
+
+# =========================
+# ROUTES
+# =========================
+@app.route("/", methods=["GET", "POST"])
+def index():
     if request.method == "POST":
-        name = request.form.get("client_name")
-        client_index[name] = 0
-        get_folder_id(name, CLIENTS_ID)
-        return render_template("viewer.html", client=name)
+        client_name = request.form.get("client_name")
+
+        if not client_name:
+            return "Client name required", 400
+
+        # Create client folder
+        client_folder_id = create_drive_folder(client_name)
+
+        # Create subfolders
+        create_drive_folder("Selected", client_folder_id)
+        create_drive_folder("Rejected", client_folder_id)
+
+        return redirect(url_for("upload", client=client_name, folder_id=client_folder_id))
+
     return render_template("login.html")
 
-@app.route('/photo/<client>')
-def photo(client):
-    i = client_index.get(client, 0)
-    if i >= len(photos):
-        return "DONE"
-    file_id = photos[i]['id']
-    data = drive.files().get_media(fileId=file_id).execute()
-    img = base64.b64encode(data).decode()
-    return jsonify({"image": img, "name": photos[i]['name']})
 
-@app.route('/action', methods=["POST"])
+@app.route("/upload", methods=["GET", "POST"])
+def upload():
+    client = request.args.get("client")
+    folder_id = request.args.get("folder_id")
+
+    if request.method == "POST":
+        files = request.files.getlist("photos")
+
+        for file in files:
+            save_path = os.path.join("/tmp", file.filename)
+            file.save(save_path)
+            upload_to_drive(save_path, file.filename, folder_id)
+
+        return "Photos uploaded successfully!"
+
+    return render_template("viewer.html", client=client)
+
+
+@app.route("/action", methods=["POST"])
 def action():
     data = request.json
-    client = data['client']
-    choice = data['choice']
+    return jsonify({"status": "saved", "data": data})
 
-    i = client_index[client]
-    file = photos[i]
 
-    client_folder = get_folder_id(client, CLIENTS_ID)
-    choice_folder = get_folder_id(choice, client_folder)
-
-    drive.files().update(
-        fileId=file['id'],
-        addParents=choice_folder,
-        removeParents=EVENT_ID
-    ).execute()
-
-    client_index[client] += 1
-    return jsonify({"next": True})
-
-# ==================
+# =========================
+# MAIN
+# =========================
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=5000)
