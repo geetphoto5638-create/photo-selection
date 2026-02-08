@@ -1,37 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Photo Selection</title>
+    <title>Photo Viewer</title>
+    <style>
+        img {
+            max-width: 90%;
+            max-height: 80vh;
+        }
+        button {
+            padding: 15px;
+            margin: 10px;
+            font-size: 18px;
+        }
+    </style>
 </head>
 <body>
-    <h2>Client: {{ client }}</h2>
 
-    <img src="/photos/{{ photo }}" style="max-width:90%;height:auto;"><br><br>
+<h2>Hello {{ client }}</h2>
 
-    <button onclick="send('Selected')">Select</button>
-    <button onclick="send('Rejected')">Reject</button>
-    <button onclick="send('Best')">⭐ Best</button>
+<img id="photo" src="/photos/{{ photo }}">
 
-    <script>
-        function send(action){
-            fetch("/action",{
-                method:"POST",
-                headers:{ "Content-Type":"application/json" },
-                body: JSON.stringify({
-                    client:"{{ client }}",
-                    action: action
-                })
-            })
-            .then(r=>r.json())
-            .then(d=>{
-                if(d.done){
-                    alert("All photos completed");
-                    location.reload();
-                }else{
-                    document.querySelector("img").src = "/photos/" + d.photo;
-                }
-            });
+<br><br>
+
+<button onclick="sendAction('Selected')">👍 Select</button>
+<button onclick="sendAction('Rejected')">❌ Reject</button>
+<button onclick="sendAction('Best')">⭐ Best</button>
+
+<script>
+function sendAction(action) {
+    fetch("/action", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            client: "{{ client }}",
+            action: action
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.done) {
+            alert("Selection Completed");
+            location.reload();
+        } else {
+            document.getElementById("photo").src = "/photos/" + data.photo;
         }
-    </script>
+    });
+}
+</script>
+
 </body>
 </html>
