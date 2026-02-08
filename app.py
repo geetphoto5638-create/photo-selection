@@ -1,94 +1,93 @@
-from flask import Flask,import shutil, render_template, request, jsonify, send_from_directory
-import os
+from flask import Flask, render_template, request, jsonify, send_from_directory
+import shutil
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from io import BytesIO
+import base64
 
 app = Flask(__name__)
 
-# ---------------- PATH SETUP (IMPORTANT) ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# ================== GOOGLE DRIVE CONFIG ==================
+SCOPES = ['https://www.googleapis.com/auth/drive']
+SERVICE_ACCOUNT_FILE = 'service_account.json'
 
-PHOTO_DIR = os.path.join(BASE_DIR, "Photos", "Event1")
-CLIENTS_DIR = os.path.join(BASE_DIR, "Clients")
+creds = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+)
+drive = build('drive', 'v3', credentials=creds)
 
-os.makedirs(PHOTO_DIR, exist_ok=True)
-os.makedirs(CLIENTS_DIR, exist_ok=True)
+EVENT_FOLDER_NAME = "Event1"
+CLIENTS_FOLDER_NAME = "Clients"
 
-# ---------------- LOAD PHOTOS ----------------
-photos = [
-    f for f in os.listdir(PHOTO_DIR)
-    if f.lower().endswith((".jpg", ".jpeg", ".png"))
-]
-photos.sort()
+# ================== HELPERS ==================
+def get_folder_id(name, parent=None):
+    q = f"name='{name}' and mimeType='application/vnd.google-apps.folder'"
+    if parent:
+        q += f" and '{parent}' in parents"
+    res = drive.files().list(q=q).execute().get('files')
+    if res:
+        return res[0]['id']
+    file_metadata = {'name': name, 'mimeType': 'application/vnd.google-apps.folder'}
+    if parent:
+        file_metadata['parents'] = [parent]
+    return drive.files().create(body=file_metadata).execute()['id']
 
+ROOT_ID = get_folder_id("PhotoSelection")
+EVENT_ID = get_folder_id(EVENT_FOLDER_NAME, ROOT_ID)
+CLIENTS_ID = get_folder_id(CLIENTS_FOLDER_NAME, ROOT_ID)
+
+def list_photos():
+    res = drive.files().list(
+        q=f"'{EVENT_ID}' in parents and mimeType contains 'image/'",
+        fields="files(id,name)"
+    ).execute()
+    return res.get('files', [])
+
+photos = list_photos()
 client_index = {}
 
-# ---------------- LOGIN PAGE ----------------
-@app.route("/", methods=["GET", "POST"])
-def index():
+# ================== ROUTES ==================
+@app.route('/', methods=["GET", "POST"])
+def login():
     if request.method == "POST":
-        client_name = request.form.get("client_name", "").strip()
-
-        if not client_name:
-            return "Name required"
-
-        # client folders
-        base = os.path.join(CLIENTS_DIR, client_name)
-        os.makedirs(base, exist_ok=True)
-        os.makedirs(os.path.join(base, "Selected"), exist_ok=True)
-        os.makedirs(os.path.join(base, "Rejected"), exist_ok=True)
-        os.makedirs(os.path.join(base, "Best"), exist_ok=True)
-
-        print("Client folder created:", base)
-
-        client_index[client_name] = 0
-
-        if len(photos) == 0:
-            return "No photos found in Photos/Event1"
-
-        return render_template(
-            "viewer.html",
-            client=client_name,
-            photo=photos[0]
-        )
-
+        name = request.form.get("client_name")
+        client_index[name] = 0
+        get_folder_id(name, CLIENTS_ID)
+        return render_template("viewer.html", client=name)
     return render_template("login.html")
 
-# ---------------- ACTION (SELECT / REJECT / BEST) ----------------
-@app.route("/action", methods=["POST"])
+@app.route('/photo/<client>')
+def photo(client):
+    i = client_index.get(client, 0)
+    if i >= len(photos):
+        return "DONE"
+    file_id = photos[i]['id']
+    data = drive.files().get_media(fileId=file_id).execute()
+    img = base64.b64encode(data).decode()
+    return jsonify({"image": img, "name": photos[i]['name']})
+
+@app.route('/action', methods=["POST"])
 def action():
     data = request.json
-    client = data["client"]
-    action_type = data["action"]
+    client = data['client']
+    choice = data['choice']
 
-    index = client_index.get(client, 0)
+    i = client_index[client]
+    file = photos[i]
 
-    if index >= len(photos):
-        return jsonify({"done": True})
+    client_folder = get_folder_id(client, CLIENTS_ID)
+    choice_folder = get_folder_id(choice, client_folder)
 
-    photo = photos[index]
-
-    target = os.path.join(CLIENTS_DIR, client, action_type)
-    os.makedirs(target, exist_ok=True)
-
-    src = os.path.join(PHOTO_DIR, photo)
-    dst = os.path.join(target, photo)
-
-    if os.path.exists(src):
-        shutil.copy2(src, dst)
-        print("Copied to:", dst)
+    drive.files().update(
+        fileId=file['id'],
+        addParents=choice_folder,
+        removeParents=EVENT_ID
+    ).execute()
 
     client_index[client] += 1
+    return jsonify({"next": True})
 
-    if client_index[client] >= len(photos):
-        return jsonify({"done": True})
-
-    return jsonify({"photo": photos[client_index[client]]})
-
-
-# ---------------- SERVE PHOTOS ----------------
-@app.route("/photos/<filename>")
-def photo_file(filename):
-    return send_from_directory(PHOTO_DIR, filename)
-
-# ---------------- RUN ----------------
+# ==================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run()
