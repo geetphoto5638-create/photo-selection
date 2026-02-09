@@ -1,92 +1,60 @@
-from flask import Flask, render_template, request, redirect, url_for
 import os
-import io
+import json
+from flask import Flask, render_template, request, redirect
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
 
 app = Flask(__name__)
 
-# ---------------------------
-# CONFIG
-# ---------------------------
-TEMP_DIR = "static/temp"
-os.makedirs(TEMP_DIR, exist_ok=True)
+# ---------- GOOGLE AUTH ----------
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
-# Google Drive setup (replace with your credentials)
-# Make sure `drive_service` is properly authenticated
-drive_service = build('drive', 'v3', credentials=YOUR_CREDENTIALS)
+service_account_info = json.loads(
+    os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+)
 
-# Example: list of file IDs from Drive
-photos_list = [
-    {"id": "file_id_1", "name": "photo1.jpg"},
-    {"id": "file_id_2", "name": "photo2.jpg"},
-    # add more
-]
-current_index = 0
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=SCOPES
+)
 
-# ---------------------------
-# HELPER FUNCTIONS
-# ---------------------------
-def download_photo(file_id, filename):
-    """Download photo from Google Drive to TEMP_DIR"""
-    request = drive_service.files().get_media(fileId=file_id)
-    fh = io.FileIO(os.path.join(TEMP_DIR, filename), 'wb')
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-    fh.close()
+drive_service = build("drive", "v3", credentials=credentials)
 
-def get_next_photo():
-    """Return next photo filename"""
-    global current_index
-    if current_index >= len(photos_list):
-        return None
-    photo = photos_list[current_index]
-    download_photo(photo['id'], photo['name'])
-    return photo['name']
+# ---------- FOLDER IDS (CHANGE ONLY THESE) ----------
+UPLOAD_FOLDER_ID = "1d9nYSYcokCa1MLxNFa6Z9Cp50LjLtsMU"
+SELECTED_FOLDER_ID = "16AeNaK_0O1y0ArbT2pNo2mUtptx-7Kt3"
+REJECTED_FOLDER_ID = "1xyfwKc-wGvKmCEwlDP_HgDEN_wGhyACD"
 
-def move_photo_to_folder(file_id, folder_id):
-    """Move file in Drive (on Select / Reject)"""
-    drive_service.files().update(
-        fileId=file_id,
-        addParents=folder_id,
-        removeParents='root',  # adjust according to your folder structure
-        fields='id, parents'
-    ).execute()
-
-# ---------------------------
-# ROUTES
-# ---------------------------
+# ---------- ROUTES ----------
 @app.route("/")
 def index():
-    photo = get_next_photo()
-    if not photo:
-        return "No more photos!"
-    return render_template("viewer.html", photo=photo)
+    results = drive_service.files().list(
+        q=f"'{UPLOAD_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed=false",
+        fields="files(id, name)"
+    ).execute()
 
-@app.route("/action", methods=["POST"])
-def action():
-    global current_index
-    action_type = request.form.get("action")  # select or reject
-    if current_index >= len(photos_list):
-        return redirect(url_for('index'))
-    
-    photo = photos_list[current_index]
-    file_id = photo['id']
-    
-    # Example: folder IDs for Select/Reject
-    if action_type == "select":
-        move_photo_to_folder(file_id, folder_id="SELECT_FOLDER_ID")
-    elif action_type == "reject":
-        move_photo_to_folder(file_id, folder_id="REJECT_FOLDER_ID")
-    
-    # Increment index
-    current_index += 1
-    return redirect(url_for('index'))
+    files = results.get("files", [])
+    return render_template("index.html", files=files)
 
-# ---------------------------
-# RUN
-# ---------------------------
+
+@app.route("/select/<file_id>")
+def select_photo(file_id):
+    drive_service.files().update(
+        fileId=file_id,
+        addParents=SELECTED_FOLDER_ID,
+        removeParents=UPLOAD_FOLDER_ID
+    ).execute()
+    return redirect("/")
+
+
+@app.route("/reject/<file_id>")
+def reject_photo(file_id):
+    drive_service.files().update(
+        fileId=file_id,
+        addParents=REJECTED_FOLDER_ID,
+        removeParents=UPLOAD_FOLDER_ID
+    ).execute()
+    return redirect("/")
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
