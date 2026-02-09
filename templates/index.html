@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Photo Selection</title>
+    <style>
+        body { font-family: Arial; }
+        img { width: 200px; margin: 10px; }
+        .photo { display: inline-block; text-align: center; }
+        a { display: block; margin: 5px; }
+    </style>
+</head>
+<body>
+
+<h2>Photo Selection Panel</h2>
+
+{% if files %}
+    {% for file in files %}
+        <div class="photo">
+            <img src="https://drive.google.com/uc?id={{ file.id }}" />
+            <a href="/select/{{ file.id }}">✅ Select</a>
+            <a href="/reject/{{ file.id }}">❌ Reject</a>
+        </div>
+    {% endfor %}
+{% else %}
+    <p>No photos found</p>
+{% endif %}
+
+</body>
+</html>
