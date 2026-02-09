@@ -1,60 +1,56 @@
+from flask import Flask, render_template, request, send_from_directory, jsonify
 import os
-import json
-from flask import Flask, render_template, request, redirect
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
+import gspread
+from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
-# ---------- GOOGLE AUTH ----------
-SCOPES = ["https://www.googleapis.com/auth/drive"]
+# -------- GOOGLE SHEET SETUP --------
+SHEET_ID = "1WQ2YsFnxgD7UVxtn2MWFKD0dOtDaLpAqu32hEy7hj7U"
 
-service_account_info = json.loads(
-    os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+creds = Credentials.from_service_account_info(
+    eval(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")),
+    scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
+gc = gspread.authorize(creds)
+sheet = gc.open_by_key(SHEET_ID).sheet1
 
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info, scopes=SCOPES
-)
+# -------- ROUTES --------
 
-drive_service = build("drive", "v3", credentials=credentials)
-
-# ---------- FOLDER IDS (CHANGE ONLY THESE) ----------
-UPLOAD_FOLDER_ID = "1d9nYSYcokCa1MLxNFa6Z9Cp50LjLtsMU"
-SELECTED_FOLDER_ID = "16AeNaK_0O1y0ArbT2pNo2mUtptx-7Kt3"
-REJECTED_FOLDER_ID = "1xyfwKc-wGvKmCEwlDP_HgDEN_wGhyACD"
-
-# ---------- ROUTES ----------
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def index():
-    results = drive_service.files().list(
-        q=f"'{UPLOAD_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed=false",
-        fields="files(id, name)"
-    ).execute()
+    client = request.args.get("client")
+    event = "event1"   # photos/event1/
 
-    files = results.get("files", [])
-    return render_template("index.html", files=files)
+    if not client:
+        return "Client name missing in URL"
 
+    photo_dir = os.path.join("photos", event)
+    photos = os.listdir(photo_dir)
 
-@app.route("/select/<file_id>")
-def select_photo(file_id):
-    drive_service.files().update(
-        fileId=file_id,
-        addParents=SELECTED_FOLDER_ID,
-        removeParents=UPLOAD_FOLDER_ID
-    ).execute()
-    return redirect("/")
+    return render_template(
+        "viewer.html",
+        photos=photos,
+        client=client,
+        event=event
+    )
 
 
-@app.route("/reject/<file_id>")
-def reject_photo(file_id):
-    drive_service.files().update(
-        fileId=file_id,
-        addParents=REJECTED_FOLDER_ID,
-        removeParents=UPLOAD_FOLDER_ID
-    ).execute()
-    return redirect("/")
+@app.route("/photos/<event>/<filename>")
+def serve_photo(event, filename):
+    return send_from_directory(f"photos/{event}", filename)
+
+
+@app.route("/action", methods=["POST"])
+def action():
+    data = request.json
+    sheet.append_row([
+        data["client"],
+        data["photo"],
+        data["action"]
+    ])
+    return jsonify({"status": "saved"})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)

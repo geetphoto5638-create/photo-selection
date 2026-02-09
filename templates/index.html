@@ -3,27 +3,29 @@
 <head>
     <title>Photo Selection</title>
     <style>
-        body { font-family: Arial; }
-        img { width: 200px; margin: 10px; }
-        .photo { display: inline-block; text-align: center; }
-        a { display: block; margin: 5px; }
+        body {
+            font-family: Arial;
+            text-align: center;
+            margin-top: 80px;
+        }
+        a {
+            padding: 15px 30px;
+            background: black;
+            color: white;
+            text-decoration: none;
+            font-size: 18px;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
 
-<h2>Photo Selection Panel</h2>
+    <h1>Photo Selection</h1>
+    <p>Click below to view photos</p>
 
-{% if files %}
-    {% for file in files %}
-        <div class="photo">
-            <img src="https://drive.google.com/uc?id={{ file.id }}" />
-            <a href="/select/{{ file.id }}">✅ Select</a>
-            <a href="/reject/{{ file.id }}">❌ Reject</a>
-        </div>
-    {% endfor %}
-{% else %}
-    <p>No photos found</p>
-{% endif %}
+    <a href="{{ album_link }}" target="_blank">
+        View Photos
+    </a>
 
 </body>
 </html>

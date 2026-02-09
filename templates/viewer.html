@@ -3,49 +3,36 @@
 <head>
     <title>Photo Selection</title>
     <style>
-        body {
-            text-align: center;
-            font-family: Arial;
-            background: #f2f2f2;
-        }
-        img {
-            max-width: 90%;
-            max-height: 80vh;
-            border-radius: 10px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.3);
-        }
-        .btn {
-            padding: 15px 30px;
-            font-size: 18px;
-            margin: 20px;
-            border: none;
-            cursor: pointer;
-            border-radius: 8px;
-        }
-        .select {
-            background: green;
-            color: white;
-        }
-        .reject {
-            background: red;
-            color: white;
-        }
+        img { width: 300px; display: block; }
+        button { margin: 5px; padding: 10px; }
     </style>
 </head>
 <body>
 
-    <h2>Select / Reject Photo</h2>
+<h2>Client: {{ client }}</h2>
 
-    <img src="{{ url_for('static', filename='temp/' + photo) }}">
-
+{% for photo in photos %}
     <div>
-        <a href="/select/{{ file_id }}">
-            <button class="btn select">✔ SELECT</button>
-        </a>
-        <a href="/reject/{{ file_id }}">
-            <button class="btn reject">✖ REJECT</button>
-        </a>
+        <img src="/photos/{{ event }}/{{ photo }}">
+        <br>
+        <button onclick="send('{{ photo }}','Selected')">Select</button>
+        <button onclick="send('{{ photo }}','Rejected')">Reject</button>
     </div>
+{% endfor %}
+
+<script>
+function send(photo, action) {
+    fetch("/action", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+            client: "{{ client }}",
+            photo: photo,
+            action: action
+        })
+    });
+}
+</script>
 
 </body>
 </html>
