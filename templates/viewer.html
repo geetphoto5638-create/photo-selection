@@ -1,25 +1,33 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Viewer</title>
+    <title>Photo Selection</title>
     <style>
-        img {
-            width: 250px;
-            margin: 10px;
-        }
+        img { width: 300px; display: block; }
+        button { margin: 5px; }
     </style>
+
+    <script>
+        function sendAction(photo, decision) {
+            fetch("/action", {
+                method: "POST",
+                headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                body: `photo=${photo}&decision=${decision}&client={{ client }}`
+            });
+        }
+    </script>
 </head>
+
 <body>
+    <h2>Client: {{ client }}</h2>
 
-<h2>Client: {{ client }}</h2>
-
-{% if photos %}
     {% for photo in photos %}
-        <img src="{{ url_for('static', filename='photos/' + photo) }}">
+        <div>
+            <img src="/static/photos/{{ photo }}">
+            <button onclick="sendAction('{{ photo }}','select')">✅ Select</button>
+            <button onclick="sendAction('{{ photo }}','reject')">❌ Reject</button>
+        </div>
+        <hr>
     {% endfor %}
-{% else %}
-    <p>No photos found</p>
-{% endif %}
-
 </body>
 </html>
