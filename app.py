@@ -1,56 +1,47 @@
-from flask import Flask, render_template, request, redirect, url_for
-import os
+from flask import Flask, render_template, request, redirect
+import gspread, os, json, datetime
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-PHOTO_FOLDER = "static/photos"
-CLIENT_FOLDER = "clients"
+# ---------- Google Auth ----------
+creds = Credentials.from_service_account_info(
+    json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]),
+    scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+)
 
+gc = gspread.authorize(creds)
+sheet = gc.open_by_key(os.environ["SHEET_ID"]).sheet1
 
+drive = build("drive", "v3", credentials=creds)
+
+# ---------- Routes ----------
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        client_name = request.form.get("client_name")
-
-        if not client_name:
-            return "Client name missing", 400
-
-        path = os.path.join(CLIENT_FOLDER, client_name)
-        os.makedirs(path, exist_ok=True)
-
-        open(os.path.join(path, "selected.txt"), "a").close()
-        open(os.path.join(path, "rejected.txt"), "a").close()
-
-        return redirect(url_for("viewer", client=client_name))
-
+        client = request.form["client"]
+        return redirect(f"/view/{client}")
     return render_template("index.html")
 
+@app.route("/view/<client>")
+def view(client):
+    files = drive.files().list(
+        q=f"'{os.environ['DRIVE_FOLDER_ID']}' in parents and mimeType contains 'image/'",
+        fields="files(id,name)"
+    ).execute()["files"]
 
-@app.route("/viewer")
-def viewer():
-    client = request.args.get("client")
-    if not client:
-        return "Client missing", 400
+    return render_template("viewer.html", files=files, client=client)
 
-    photos = os.listdir(PHOTO_FOLDER)
-    return render_template("viewer.html", photos=photos, client=client)
-
-
-@app.route("/action", methods=["POST"])
-def action():
-    client = request.form.get("client")
-    photo = request.form.get("photo")
-    decision = request.form.get("decision")
-
-    client_path = os.path.join(CLIENT_FOLDER, client)
-
-    file = "selected.txt" if decision == "select" else "rejected.txt"
-
-    with open(os.path.join(client_path, file), "a") as f:
-        f.write(photo + "\n")
-
+@app.route("/save", methods=["POST"])
+def save():
+    sheet.append_row([
+        request.form["client"],
+        request.form["photo"],
+        request.form["status"],
+        str(datetime.datetime.now())
+    ])
     return "OK"
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
