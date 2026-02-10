@@ -1,4 +1,11 @@
-from flask import render_template
+from flask import Flask, render_template, request, redirect, session
+import os
+import gspread
+from google.oauth2.service_account import Credentials
+
+app = Flask(__name__)
+app.secret_key = "secret123"
+
 
 PHOTOS = [
     "https://picsum.photos/id/1011/300/300",
