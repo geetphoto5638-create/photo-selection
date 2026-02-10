@@ -2,37 +2,23 @@
 <html>
 <head>
     <title>Photo Selection</title>
-    <style>
-        img { width: 300px; display: block; }
-        button { margin: 5px; padding: 10px; }
-    </style>
 </head>
 <body>
 
-<h2>Client: {{ client }}</h2>
+<h2>Select Photos</h2>
 
-{% for photo in photos %}
-    <div>
-        <img src="/photos/{{ event }}/{{ photo }}">
-        <br>
-        <button onclick="send('{{ photo }}','Selected')">Select</button>
-        <button onclick="send('{{ photo }}','Rejected')">Reject</button>
-    </div>
-{% endfor %}
+<form method="post">
+    {% for photo in photos %}
+        <label>
+            <input type="checkbox" name="photos" value="{{ photo }}">
+            <br>
+            <img src="{{ photo }}" width="200">
+        </label>
+        <br><br>
+    {% endfor %}
 
-<script>
-function send(photo, action) {
-    fetch("/action", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({
-            client: "{{ client }}",
-            photo: photo,
-            action: action
-        })
-    });
-}
-</script>
+    <button type="submit">Submit Selection</button>
+</form>
 
 </body>
 </html>
