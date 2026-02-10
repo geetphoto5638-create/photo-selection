@@ -1,56 +1,53 @@
-from flask import Flask, render_template, request, send_from_directory, jsonify
+from flask import Flask, request, redirect, session
 import os
 import gspread
 from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
+app.secret_key = "secret123"
 
-# -------- GOOGLE SHEET SETUP --------
-SHEET_ID = "1WQ2YsFnxgD7UVxtn2MWFKD0dOtDaLpAqu32hEy7hj7U"
-
+# ---------- GOOGLE SHEET ----------
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 creds = Credentials.from_service_account_info(
     eval(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")),
-    scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    scopes=SCOPES
 )
 gc = gspread.authorize(creds)
-sheet = gc.open_by_key(SHEET_ID).sheet1
+sheet = gc.open_by_key(os.environ.get("SHEET_ID")).sheet1
 
-# -------- ROUTES --------
 
+# ---------- STEP 1 : CLIENT NAME ----------
 @app.route("/", methods=["GET", "POST"])
-def index():
-    client = request.args.get("client")
-    event = "event1"   # photos/event1/
+def home():
+    if request.method == "POST":
+        client_name = request.form.get("client_name")
 
-    if not client:
-        return "Client name missing in URL"
+        if not client_name:
+            return "Client name missing", 400
 
-    photo_dir = os.path.join("photos", event)
-    photos = os.listdir(photo_dir)
+        session["client_name"] = client_name
+        return redirect("/select")
 
-    return render_template(
-        "viewer.html",
-        photos=photos,
-        client=client,
-        event=event
-    )
-
-
-@app.route("/photos/<event>/<filename>")
-def serve_photo(event, filename):
-    return send_from_directory(f"photos/{event}", filename)
+    return """
+        <h2>Enter your name</h2>
+        <form method="post">
+            <input name="client_name" required>
+            <button type="submit">Continue</button>
+        </form>
+    """
 
 
-@app.route("/action", methods=["POST"])
-def action():
-    data = request.json
-    sheet.append_row([
-        data["client"],
-        data["photo"],
-        data["action"]
-    ])
-    return jsonify({"status": "saved"})
+# ---------- STEP 2 : PHOTO SELECTION ----------
+@app.route("/select", methods=["GET", "POST"])
+def select():
+    client_name = session.get("client_name")
 
+    if not client_name:
+        return redirect("/")
 
-if __name__ == "__main__":
-    app.run(debug=True)
+    if request.method == "POST":
+        selected = request.form.getlist("photos")
+        sheet.append_row([client_name, ", ".join(selected)])
+        return "Selection saved successfully"
+
+    return "Photo selection page"
