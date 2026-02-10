@@ -1,24 +1,10 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Photo Selection</title>
-</head>
-<body>
+<h2>Client: {{ client }}</h2>
 
-<h2>Select Photos</h2>
-
-<form method="post">
-    {% for photo in photos %}
-        <label>
-            <input type="checkbox" name="photos" value="{{ photo }}">
-            <br>
-            <img src="{{ photo }}" width="200">
-        </label>
-        <br><br>
-    {% endfor %}
-
-    <button type="submit">Submit Selection</button>
-</form>
-
-</body>
-</html>
+{% if photos %}
+  {% for p in photos %}
+    <img src="{{ url_for('static', filename='photos/' + p) }}"
+         style="width:200px;margin:10px;">
+  {% endfor %}
+{% else %}
+  <p>No photos found</p>
+{% endif %}
