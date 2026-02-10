@@ -1,39 +1,34 @@
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect, url_for
 import os
 
 app = Flask(__name__)
-app.secret_key = "photo-selection-secret"
 
-# ================= HOME =================
+PHOTO_FOLDER = "static/photos"
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        client = request.form.get("client_name")
-        if not client:
-            return "Client name missing"
-        session["client_name"] = client
-        return redirect("/select")
+        client_name = request.form.get("client_name")
+        if not client_name:
+            return "Client name missing", 400
+        return redirect(url_for("viewer", client=client_name))
     return render_template("index.html")
 
-# ================= PHOTO VIEW =================
-@app.route("/select")
-def select():
-    client = session.get("client_name")
+@app.route("/viewer")
+def viewer():
+    client = request.args.get("client")
     if not client:
-        return redirect("/")
+        return "Client name missing", 400
 
-    photo_dir = os.path.join(app.static_folder, "photos")
-
-    if not os.path.exists(photo_dir):
-        return "static/photos folder missing"
+    if not os.path.exists(PHOTO_FOLDER):
+        return "static/photos folder missing", 500
 
     photos = [
-        f for f in os.listdir(photo_dir)
+        f for f in os.listdir(PHOTO_FOLDER)
         if f.lower().endswith((".jpg", ".jpeg", ".png"))
     ]
 
     return render_template("viewer.html", photos=photos, client=client)
 
-# ================= RUN =================
 if __name__ == "__main__":
     app.run(debug=True)

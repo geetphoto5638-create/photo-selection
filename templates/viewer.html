@@ -1,10 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Viewer</title>
+    <style>
+        img {
+            width: 250px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+
 <h2>Client: {{ client }}</h2>
 
 {% if photos %}
-  {% for p in photos %}
-    <img src="{{ url_for('static', filename='photos/' + p) }}"
-         style="width:200px;margin:10px;">
-  {% endfor %}
+    {% for photo in photos %}
+        <img src="{{ url_for('static', filename='photos/' + photo) }}">
+    {% endfor %}
 {% else %}
-  <p>No photos found</p>
+    <p>No photos found</p>
 {% endif %}
+
+</body>
+</html>
