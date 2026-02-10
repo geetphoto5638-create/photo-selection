@@ -1,47 +1,86 @@
-from flask import Flask, render_template, request, redirect
-import gspread, os, json, datetime
-from google.oauth2.service_account import Credentials
+from flask import Flask, render_template, request, redirect, url_for
+import os
+
 from googleapiclient.discovery import build
+from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
-# ---------- Google Auth ----------
-creds = Credentials.from_service_account_info(
-    json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]),
-    scopes=[
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
+# ================= GOOGLE DRIVE =================
+
+SCOPES = ["https://www.googleapis.com/auth/drive"]
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CREDS = Credentials.from_service_account_file(
+    os.path.join(BASE_DIR, "credentials.json"),
+    scopes=SCOPES
 )
 
-gc = gspread.authorize(creds)
-sheet = gc.open_by_key(os.environ["SHEET_ID"]).sheet1
+drive = build("drive", "v3", credentials=CREDS)
 
-drive = build("drive", "v3", credentials=creds)
+# 🔴 इथे तुमचा Drive Folder ID टाका
+PARENT_FOLDER_ID = "1Fu10oB_TpUZxGMTmrFs5tq4lEbBd9DSa"
 
-# ---------- Routes ----------
+
+# ================= ROUTES =================
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        client = request.form["client"]
-        return redirect(f"/view/{client}")
+        name = request.form.get("client")
+        return redirect(url_for("view", client=name))
     return render_template("index.html")
+
 
 @app.route("/view/<client>")
 def view(client):
-    files = drive.files().list(
-        q=f"'{os.environ['DRIVE_FOLDER_ID']}' in parents and mimeType contains 'image/'",
+
+    # 🔹 Images fetch
+    results = drive.files().list(
+        q=f"'{PARENT_FOLDER_ID}' in parents and mimeType contains 'image/'",
         fields="files(id,name)"
-    ).execute()["files"]
+    ).execute()
+
+    files = results.get("files", [])
 
     return render_template("viewer.html", files=files, client=client)
 
+
 @app.route("/save", methods=["POST"])
 def save():
-    sheet.append_row([
-        request.form["client"],
-        request.form["photo"],
-        request.form["status"],
-        str(datetime.datetime.now())
-    ])
-    return "OK"
+    client = request.form["client"]
+    selected = request.form.getlist("photos")
+
+    # 🔹 Create client folder
+    folder_metadata = {
+        "name": client,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [PARENT_FOLDER_ID]
+    }
+
+    folder = drive.files().create(body=folder_metadata).execute()
+    client_folder_id = folder["id"]
+
+    # 🔹 Copy selected photos
+    for file_id in selected:
+        drive.files().copy(
+            fileId=file_id,
+            body={"parents": [client_folder_id]}
+        ).execute()
+
+    # 🔹 Save text file
+    content = "\n".join(selected)
+
+    drive.files().create(
+        body={
+            "name": "selected.txt",
+            "parents": [client_folder_id]
+        },
+        media_body=content
+    ).execute()
+
+    return "Selection Saved Successfully ✅"
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
