@@ -1,29 +1,32 @@
 from flask import Flask, render_template, request, redirect, session
 import os
-import gspread
-from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 app.secret_key = "secret123"
 
 
-PHOTOS = [
-    "https://picsum.photos/id/1011/300/300",
-    "https://picsum.photos/id/1015/300/300",
-    "https://picsum.photos/id/1025/300/300",
-    "https://picsum.photos/id/1035/300/300"
-]
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        client_name = request.form.get("client_name")
+        if not client_name:
+            return "Client name missing"
 
-@app.route("/select", methods=["GET", "POST"])
+        session["client_name"] = client_name
+        return redirect("/select")
+
+    return render_template("index.html")
+
+
+@app.route("/select", methods=["GET"])
 def select():
     client_name = session.get("client_name")
-
     if not client_name:
         return redirect("/")
 
-    if request.method == "POST":
-        selected = request.form.getlist("photos")
-        sheet.append_row([client_name, ", ".join(selected)])
-        return "Selection saved successfully"
+    photos = os.listdir("static/photos")
+    return render_template("viewer.html", photos=photos)
 
-    return render_template("viewer.html", photos=PHOTOS)
+
+if __name__ == "__main__":
+    app.run(debug=True)
