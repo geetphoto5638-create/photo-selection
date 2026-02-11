@@ -4,12 +4,18 @@ import os
 import json, os
 from google.oauth2.service_account import Credentials
 
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/spreadsheets"
+]
+
 creds_dict = json.loads(os.environ["GOOGLE_CREDS_JSON"])
 
-creds = Credentials.from_service_account_info(
+CREDS = Credentials.from_service_account_info(
     creds_dict,
-    scopes=["https://www.googleapis.com/auth/drive.readonly"]
+    scopes=SCOPES
 )
+
 
 
 app = Flask(__name__)
