@@ -26,8 +26,7 @@ app = Flask(__name__)
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-CREDS = Credentials.from_service_account_file(
-    os.path.join(BASE_DIR, "credentials.json"),
+CREDS = Credentials.from_service_account_file,
     scopes=SCOPES
 )
 
