@@ -23,14 +23,21 @@ app = Flask(__name__)
 
 # ================= GOOGLE DRIVE =================
 
-SCOPES = ["https://www.googleapis.com/auth/drive"]
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+import os, json
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
 
-CREDS = Credentials.from_service_account_file,
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+creds_info = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+
+CREDS = Credentials.from_service_account_info(
+    creds_info,
     scopes=SCOPES
 )
 
 drive = build("drive", "v3", credentials=CREDS)
+
 
 # 🔴 इथे तुमचा Drive Folder ID टाका
 PARENT_FOLDER_ID = "1Fu10oB_TpUZxGMTmrFs5tq4lEbBd9DSa"
