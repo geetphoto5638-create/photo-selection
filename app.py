@@ -1,10 +1,10 @@
-from flask import Flask, request, redirect
+from flask import Flask, request, render_template, redirect
 import os
 import json
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
-app = Flask(__name__)   # ✅ हे खूप महत्वाचे
+app = Flask(__name__)
 
 # ---------------- GOOGLE CREDS ----------------
 SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -22,52 +22,80 @@ CREDS = Credentials.from_service_account_info(
 
 drive = build("drive", "v3", credentials=CREDS)
 
-# ---------------- HOME ----------------
-@app.route("/")
+MAIN_FOLDER_ID = "1Fu10oB_TpUZxGMTmrFs5tq4lEbBd9DSa"
+
+# ---------------- CLIENT PAGE ----------------
+@app.route("/", methods=["GET", "POST"])
 def home():
-    return "App is running successfully"
+    if request.method == "POST":
+        client = request.form.get("client")
+        return redirect(f"/viewer?client={client}")
+
+    return '''
+        <h2>Enter Client Name</h2>
+        <form method="post">
+            <input type="text" name="client" required>
+            <button type="submit">Open Photos</button>
+        </form>
+    '''
+
+
+# ---------------- VIEWER ----------------
+@app.route("/viewer")
+def viewer():
+    client = request.args.get("client")
+
+    query = f"'{MAIN_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed=false"
+    results = drive.files().list(q=query, fields="files(id, name)").execute()
+    files = results.get("files", [])
+
+    return render_template("viewer.html", files=files, client=client)
 
 
 # ---------------- SAVE ----------------
 @app.route("/save", methods=["POST"])
 def save():
-    try:
-        client = request.form.get("client")
-        photo_id = request.form.get("photo")
+    client = request.form.get("client")
+    selected_photos = request.form.getlist("photos")
 
-        if not client:
-            return "Client missing", 400
+    if not client:
+        return "Client missing", 400
 
-        MAIN_FOLDER_ID = "1Fu10oB_TpUZxGMTmrFs5tq4lEbBd9DSa"
+    # Check if client folder exists
+    query = f"name='{client}' and '{MAIN_FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = drive.files().list(q=query, fields="files(id)").execute()
+    folders = results.get("files", [])
 
-        query = f"name='{client}' and '{MAIN_FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        results = drive.files().list(q=query, fields="files(id, name)").execute()
-        folders = results.get("files", [])
-
-        if folders:
-            client_folder_id = folders[0]["id"]
-        else:
-            folder_metadata = {
-                "name": client,
-                "mimeType": "application/vnd.google-apps.folder",
-                "parents": [MAIN_FOLDER_ID]
-            }
-            folder = drive.files().create(body=folder_metadata, fields="id").execute()
-            client_folder_id = folder.get("id")
-
-        file_metadata = {
-            "name": f"{photo_id}.txt",
-            "parents": [client_folder_id]
+    if folders:
+        client_folder_id = folders[0]["id"]
+    else:
+        folder_metadata = {
+            "name": client,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [MAIN_FOLDER_ID]
         }
+        folder = drive.files().create(body=folder_metadata, fields="id").execute()
+        client_folder_id = folder.get("id")
 
-        drive.files().create(body=file_metadata).execute()
+    # Save selected photo ids as text file
+    content = "\n".join(selected_photos)
 
-        return redirect("/")
+    file_metadata = {
+        "name": "selection.txt",
+        "parents": [client_folder_id]
+    }
 
-    except Exception as e:
-        return f"Error: {str(e)}"
+    media = {
+        "mimeType": "text/plain"
+    }
+
+    drive.files().create(
+        body=file_metadata,
+        media_body=None
+    ).execute()
+
+    return "Selection Saved Successfully"
 
 
-# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(debug=True)
