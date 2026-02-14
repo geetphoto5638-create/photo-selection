@@ -1,19 +1,20 @@
 <h2>Client: {{ client }}</h2>
 
+<form method="post" action="/save-multiple">
+
 {% for f in files %}
   <div style="display:inline-block;margin:10px;text-align:center">
     
     <img src="https://drive.google.com/thumbnail?id={{f.id}}&sz=w400"
-         width="200"
-         style="border:1px solid #ccc;padding:5px;"><br><br>
+         width="200"><br><br>
 
-    <form method="post" action="/save">
-      <input type="hidden" name="client" value="{{client}}">
-      <input type="hidden" name="photo" value="{{f.id}}">
-
-      <button name="status" value="Selected">Select</button>
-      <button name="status" value="Rejected">Reject</button>
-    </form>
+    <input type="checkbox" name="selected_photos" value="{{f.id}}">
+    Select
 
   </div>
 {% endfor %}
+
+<br><br>
+<button type="submit">Save Selection</button>
+
+</form>

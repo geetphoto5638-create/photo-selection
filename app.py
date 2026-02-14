@@ -49,25 +49,44 @@ def viewer():
     return render_template("viewer.html", files=files, client=client)
 
 # ---------------- SAVE ----------------
-@app.route("/save", methods=["POST"])
-def save():
-    client = request.form["client"]
-    photo_id = request.form["photo"]
-    status = request.form["status"]
+from flask import request, redirect
 
-    # 1️⃣ Create Client Folder (if not exists)
-    client_folder_id = create_folder(client, PHOTO_FOLDER_ID)
+@app.route("/save-multiple", methods=["POST"])
+def save_multiple():
 
-    # 2️⃣ Create Selected / Rejected Folder
-    status_folder_id = create_folder(status, client_folder_id)
+    client = request.form.get("client")
+    selected = request.form.getlist("selected_photos")
 
-    # 3️⃣ Move file copy inside that folder
-    drive.files().copy(
-        fileId=photo_id,
-        body={"parents": [status_folder_id]}
-    ).execute()
+    if not client:
+        return "Client missing", 400
 
-    return redirect(f"/viewer?client={client}")
+    if not selected:
+        return redirect(f"/view/{client}")
+
+    # Check if client folder exists
+    folder_query = f"name='{client}' and mimeType='application/vnd.google-apps.folder'"
+    folder_check = drive.files().list(q=folder_query).execute().get("files", [])
+
+    if folder_check:
+        client_folder_id = folder_check[0]["id"]
+    else:
+        folder_metadata = {
+            "name": client,
+            "mimeType": "application/vnd.google-apps.folder"
+        }
+        folder = drive.files().create(body=folder_metadata).execute()
+        client_folder_id = folder["id"]
+
+    # Copy selected photos
+    for photo_id in selected:
+        drive.files().copy(
+            fileId=photo_id,
+            body={"parents": [client_folder_id]}
+        ).execute()
+
+    return redirect(f"/view/{client}")
+
+
 
 # ---------------- CREATE FOLDER FUNCTION ----------------
 def create_folder(name, parent_id):
