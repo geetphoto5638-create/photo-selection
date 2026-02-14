@@ -2,14 +2,8 @@
 
 {% for f in files %}
   <div style="display:inline-block;margin:10px">
-    <img src="https://drive.google.com/uc?id={{f.id}}" width="200"><br>
 
-    <form method="post" action="/save">
-      <input type="hidden" name="client" value="{{client}}">
-      <input type="hidden" name="photo" value="{{f.id}}">
+    <img src="https://drive.google.com/thumbnail?id={{f.id}}&sz=w400" width="200"><br>
 
-      <button name="status" value="Selected">Select</button>
-      <button name="status" value="Rejected">Reject</button>
-    </form>
   </div>
 {% endfor %}
