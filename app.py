@@ -53,6 +53,11 @@ def viewer():
 
 
 # ---------------- SAVE ----------------
+import gspread
+
+gc = gspread.authorize(CREDS)
+sheet = gc.open("PhotoSelection").sheet1
+
 @app.route("/save", methods=["POST"])
 def save():
     client = request.form.get("client")
@@ -61,40 +66,11 @@ def save():
     if not client:
         return "Client missing", 400
 
-    # Check if client folder exists
-    query = f"name='{client}' and '{MAIN_FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    results = drive.files().list(q=query, fields="files(id)").execute()
-    folders = results.get("files", [])
+    for photo in selected_photos:
+        sheet.append_row([client, photo, "Selected"])
 
-    if folders:
-        client_folder_id = folders[0]["id"]
-    else:
-        folder_metadata = {
-            "name": client,
-            "mimeType": "application/vnd.google-apps.folder",
-            "parents": [MAIN_FOLDER_ID]
-        }
-        folder = drive.files().create(body=folder_metadata, fields="id").execute()
-        client_folder_id = folder.get("id")
+    return "Saved to Google Sheet"
 
-    # Save selected photo ids as text file
-    content = "\n".join(selected_photos)
-
-    file_metadata = {
-        "name": "selection.txt",
-        "parents": [client_folder_id]
-    }
-
-    media = {
-        "mimeType": "text/plain"
-    }
-
-    drive.files().create(
-        body=file_metadata,
-        media_body=None
-    ).execute()
-
-    return "Selection Saved Successfully"
 
 
 if __name__ == "__main__":
