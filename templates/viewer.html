@@ -1,9 +1,11 @@
 <h2>Client: {{ client }}</h2>
 
 {% for f in files %}
-  <div style="display:inline-block;margin:10px">
-    <img src="https://drive.google.com/uc?export=view&id={{f.id}}" width="200">
-
+  <div style="display:inline-block;margin:10px;text-align:center">
+    
+    <img src="https://drive.google.com/thumbnail?id={{f.id}}&sz=w400"
+         width="200"
+         style="border:1px solid #ccc;padding:5px;"><br><br>
 
     <form method="post" action="/save">
       <input type="hidden" name="client" value="{{client}}">
@@ -12,5 +14,6 @@
       <button name="status" value="Selected">Select</button>
       <button name="status" value="Rejected">Reject</button>
     </form>
+
   </div>
 {% endfor %}
