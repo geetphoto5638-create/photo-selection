@@ -24,6 +24,16 @@ drive = build("drive", "v3", credentials=CREDS)
 
 MAIN_FOLDER_ID = "1Fu10oB_TpUZxGMTmrFs5tq4lEbBd9DSa"
 
+query = f"'{MAIN_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed=false"
+
+results = drive.files().list(
+    q=query,
+    fields="files(id, name)"
+).execute()
+
+files = results.get("files", [])
+
+
 # ---------------- CLIENT PAGE ----------------
 @app.route("/", methods=["GET", "POST"])
 def home():

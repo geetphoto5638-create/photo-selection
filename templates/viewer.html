@@ -5,7 +5,7 @@
 
 {% for f in files %}
   <div style="display:inline-block;margin:10px">
-    <img src="https://drive.google.com/uc?id={{f.id}}" width="200"><br>
+    <img src="https://drive.google.com/thumbnail?id={{f.id}}&sz=w1000" width="200">
     <input type="checkbox" name="photos" value="{{f.id}}">
   </div>
 {% endfor %}
