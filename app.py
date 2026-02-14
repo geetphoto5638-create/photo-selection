@@ -1,7 +1,6 @@
 from flask import Flask, render_template_string
 import os
 import json
-
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
@@ -28,8 +27,7 @@ FOLDER_ID = "1Fu10oB_TpUZxGMTmrFs5tq4lEbBd9DSa"
 
 # ---------------- ROUTE ----------------
 @app.route("/")
-def view_photos():
-
+def view():
     results = drive.files().list(
         q=f"'{FOLDER_ID}' in parents and mimeType contains 'image/'",
         fields="files(id, name)"
@@ -38,19 +36,17 @@ def view_photos():
     files = results.get("files", [])
 
     html = """
-    <h2>Photo Selection</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,200px);gap:10px;">
+    <h1>Photo Selection</h1>
+    <div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;'>
     {% for file in files %}
         <div>
-            <img src="https://drive.google.com/uc?id={{file.id}}" width="200"><br>
-            {{file.name}}
+            <img src="https://drive.google.com/uc?id={{file['id']}}" width="200">
         </div>
     {% endfor %}
     </div>
     """
 
     return render_template_string(html, files=files)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
